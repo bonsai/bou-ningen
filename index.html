@@ -57,8 +57,15 @@ canvas{display:block;width:100%;height:auto;background:#000;border-radius:3px}
     <div class="slider">SPEED <input type="range" id="speed" min="1" max="10" value="4"></div>
     <div class="slider">DOT <input type="range" id="dot" min="12" max="40" value="22"></div>
     <input type="color" id="color" value="#00ff41" style="width:44px;height:34px;border:2px solid #0f0;border-radius:5px;background:#000;cursor:pointer">
+    
+    <!-- 新しい動作ボタン -->
+    <button class="btn motion-btn on" id="motionWalk">🚶 WALK</button>
+    <button class="btn motion-btn" id="motionIdle">🧍 IDLE</button>
+    <button class="btn motion-btn" id="motionWave">👋 WAVE</button>
+    <button class="btn motion-btn" id="motionJump">🦘 JUMP</button>
+    <button class="btn motion-btn" id="motionDance">💃 DANCE</button>
   </div>
-  <div class="foot">DOT-MATRIX STICKMAN · canvas raster</div>
+  <div class="foot">DOT-MATRIX STICKMAN · 多動作対応</div>
 
 <script>
 const cv = document.getElementById("cv");
@@ -67,16 +74,16 @@ const ctx = cv.getContext("2d");
 // ── 状態 ──
 let playing = true;
 let speedVal = 4;
-let dotPitch = 22;     // 1ドットあたりpx（グリッド密度を決める）
+let dotPitch = 22;
 let baseColor = "#00ff41";
 let rainbow = false;
 let rhue = 120;
-let phase = 0;         // 歩行位相
-let walkX = 0;         // 横移動（ドット単位）
+let phase = 0;
+let walkX = 0;
+let motionType = "walk";  // walk, idle, wave, jump, dance
 
-// ── 棒人間の骨格（グリッド単位） ──
-// 図形は高さ ~26 ドットぶん。中心を cx として組み立てる。
-function skeleton(cx, ph) {
+// ── 棒人間の骨格（拡張版） ──
+function skeleton(cx, ph, type = motionType) {
   const headR = 2.4;
   const headCY = 4.2;
   const shoulderY = headCY + headR + 1.6;
@@ -84,25 +91,49 @@ function skeleton(cx, ph) {
   const legLen = 8;
   const armLen = 6.5;
 
-  const swing = Math.sin(ph) * 3.0;        // 脚の振り
-  const armSwing = Math.sin(ph + Math.PI) * 2.6; // 腕は逆位相
-  const bob = Math.abs(Math.cos(ph)) * 1.2;      // 上下バウンド
+  let swing = Math.sin(ph) * 3.0;
+  let armSwing = Math.sin(ph + Math.PI) * 2.6;
+  let bob = Math.abs(Math.cos(ph)) * 1.2;
+
+  if (type === "idle") {
+    swing = Math.sin(ph * 0.6) * 0.8;
+    armSwing = Math.sin(ph * 0.7) * 1.1;
+    bob = Math.sin(ph * 0.4) * 0.4;
+  } 
+  else if (type === "wave") {
+    swing = Math.sin(ph * 0.8) * 1.2;           // 足はゆっくり
+    armSwing = Math.sin(ph * 5) * 5.5;          // 右腕を大きく振る
+    bob = 0.6;
+  } 
+  else if (type === "jump") {
+    bob = Math.max(0, Math.sin(ph * 3) * 9 - 4);
+    swing = Math.sin(ph * 2) * 2;
+    armSwing = Math.sin(ph * 2.5) * 3;
+  } 
+  else if (type === "dance") {
+    swing = Math.sin(ph * 4) * 4.5;
+    armSwing = Math.sin(ph * 4.5) * 5;
+    bob = Math.abs(Math.sin(ph * 3)) * 2.5;
+  }
+  // walk はデフォルト
+
   const cy0 = -bob;
 
   const head = { x: cx, y: headCY + cy0, r: headR };
   const shoulder = { x: cx, y: shoulderY + cy0 };
   const hip = { x: cx, y: hipY + cy0 };
-  const armBase = 2.2;  // 腕の外側ベース角度（常に腕として見える）
-  const legBase = 1.4;  // 脚の基本スタンス幅
+  const armBase = 2.2;
+  const legBase = 1.4;
+
   const segs = [
     // 胴
     [shoulder.x, shoulder.y, hip.x, hip.y],
-    // 腕（左右：外側ベース＋逆位相スイング）
+    // 腕（左右）
     [shoulder.x, shoulder.y + 0.4, cx - armBase + armSwing, shoulderY + armLen + cy0],
-    [shoulder.x, shoulder.y + 0.4, cx + armBase + armSwing, shoulderY + armLen + cy0],
-    // 脚（左右：基本スタンス＋スイングで前後）
+    [shoulder.x, shoulder.y + 0.4, cx + armBase - armSwing * 0.6, shoulderY + armLen + cy0],  // 左腕は少し抑えめ
+    // 脚
     [hip.x, hip.y, cx - legBase - swing, hipY + legLen + cy0],
-    [hip.x, hip.y, cx + legBase - swing, hipY + legLen + cy0],
+    [hip.x, hip.y, cx + legBase + swing * 0.7, hipY + legLen + cy0],
   ];
   return { head, segs, bottom: hipY + legLen };
 }
@@ -116,9 +147,7 @@ function distToSeg(px, py, ax, ay, bx, by) {
   return Math.hypot(px - qx, py - qy);
 }
 
-// セル(col,row)が骨格上で点灯するか
 function isLit(col, row, sk) {
-  // 頭（リング）
   const dHead = Math.abs(Math.hypot(col - sk.head.x, row - sk.head.y) - sk.head.r);
   if (dHead < 0.62) return true;
   for (const s of sk.segs) {
@@ -148,18 +177,15 @@ function frame() {
 
   const col = litColor();
 
-  // 図形の縦位置：床に立たせる
   const sk0 = skeleton(0, phase);
   const groundRow = ROWS - 3;
   const yShift = groundRow - sk0.bottom;
-  // 横位置（ドット単位、wrap）
   const cx = ((walkX % (COLS + 8)) + (COLS + 8)) % (COLS + 8) - 4;
 
   const sk = skeleton(cx, phase);
   sk.head.y += yShift;
   for (const s of sk.segs) { s[1] += yShift; s[3] += yShift; }
 
-  // 全ドット描画（消灯は薄く、点灯は発光）
   for (let rr = 0; rr < ROWS; rr++) {
     for (let c = 0; c < COLS; c++) {
       const lit = isLit(c, rr, sk);
@@ -170,7 +196,6 @@ function frame() {
         ctx.shadowColor = col; ctx.shadowBlur = pitch * 0.5;
         ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
         ctx.shadowBlur = 0;
-        // ハイライト
         ctx.beginPath(); ctx.fillStyle = "rgba(255,255,255,.35)";
         ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.32, 0, Math.PI * 2); ctx.fill();
       } else {
@@ -180,31 +205,51 @@ function frame() {
     }
   }
 
-  // 床ライン
   ctx.strokeStyle = "rgba(0,255,65,.18)"; ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(0, py(groundRow) + r + 3); ctx.lineTo(W, py(groundRow) + r + 3); ctx.stroke();
 
   if (playing) {
-    phase += 0.10 + speedVal * 0.02;
-    walkX += speedVal * 0.10;
+    const speedFactor = 0.10 + speedVal * 0.02;
+    phase += speedFactor;
+    if (motionType === "walk") {
+      walkX += speedVal * 0.10;
+    } else {
+      walkX += speedVal * 0.03;  // 他の動作はゆっくり移動
+    }
   }
   requestAnimationFrame(frame);
 }
 
 // ── コントロール ──
+function setMotion(type) {
+  motionType = type;
+  document.querySelectorAll('.motion-btn').forEach(b => {
+    b.classList.toggle('on', b.id === `motion${type.charAt(0).toUpperCase() + type.slice(1)}`);
+  });
+}
+
 document.getElementById("playBtn").addEventListener("click", (e) => {
   playing = !playing;
   e.target.textContent = playing ? "⏸ PAUSE" : "▶ PLAY";
   e.target.classList.toggle("on", playing);
 });
+
 document.getElementById("rainbowBtn").addEventListener("click", (e) => {
   rainbow = !rainbow;
   e.target.classList.toggle("on", rainbow);
 });
+
 document.getElementById("speed").addEventListener("input", (e) => speedVal = +e.target.value);
 document.getElementById("dot").addEventListener("input", (e) => dotPitch = +e.target.value);
 document.getElementById("color").addEventListener("input", (e) => baseColor = e.target.value);
+
+// 動作ボタン
+document.getElementById("motionWalk").addEventListener("click", () => setMotion("walk"));
+document.getElementById("motionIdle").addEventListener("click", () => setMotion("idle"));
+document.getElementById("motionWave").addEventListener("click", () => setMotion("wave"));
+document.getElementById("motionJump").addEventListener("click", () => setMotion("jump"));
+document.getElementById("motionDance").addEventListener("click", () => setMotion("dance"));
 
 frame();
 </script>
