@@ -92,15 +92,17 @@ function skeleton(cx, ph) {
   const head = { x: cx, y: headCY + cy0, r: headR };
   const shoulder = { x: cx, y: shoulderY + cy0 };
   const hip = { x: cx, y: hipY + cy0 };
+  const armBase = 2.2;  // 腕の外側ベース角度（常に腕として見える）
+  const legBase = 1.4;  // 脚の基本スタンス幅
   const segs = [
     // 胴
     [shoulder.x, shoulder.y, hip.x, hip.y],
-    // 腕（左右）
-    [shoulder.x, shoulder.y + 0.4, cx - 0.6 + armSwing, shoulder.y + armLen + cy0 * 0],
-    [shoulder.x, shoulder.y + 0.4, cx + 0.6 - armSwing, shoulder.y + armLen],
-    // 脚（左右）
-    [hip.x, hip.y, cx - swing, hipY + legLen + cy0],
-    [hip.x, hip.y, cx + swing, hipY + legLen + cy0],
+    // 腕（左右：外側ベース＋逆位相スイング）
+    [shoulder.x, shoulder.y + 0.4, cx - armBase + armSwing, shoulderY + armLen + cy0],
+    [shoulder.x, shoulder.y + 0.4, cx + armBase + armSwing, shoulderY + armLen + cy0],
+    // 脚（左右：基本スタンス＋スイングで前後）
+    [hip.x, hip.y, cx - legBase - swing, hipY + legLen + cy0],
+    [hip.x, hip.y, cx + legBase - swing, hipY + legLen + cy0],
   ];
   return { head, segs, bottom: hipY + legLen };
 }
