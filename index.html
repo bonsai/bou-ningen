@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#000">
+<title>ドット棒人間 / DOT BOU-NINGEN</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%}
+body{
+  background:#050505;
+  background-image:repeating-linear-gradient(180deg,transparent 0,transparent 3px,rgba(0,0,0,.18) 3px,rgba(0,0,0,.18) 4px);
+  color:#00ff41;font-family:monospace;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:100dvh;gap:14px;padding:14px
+}
+h1{font:bold clamp(12px,3vw,18px) monospace;letter-spacing:6px;opacity:.55;text-shadow:0 0 12px rgba(0,255,65,.4)}
+.stage{
+  position:relative;width:100%;max-width:680px;
+  background:linear-gradient(160deg,#1c1c1c,#0c0c0c);
+  border:clamp(8px,1.8vw,16px) solid;border-color:#3a3a3a #282828 #1e1e1e #282828;border-radius:16px;
+  box-shadow:0 0 0 3px #4a4a4a,0 0 0 5px #111,0 14px 52px rgba(0,0,0,.85),inset 0 0 70px rgba(0,0,0,.6);
+  padding:clamp(8px,1.8vw,18px)
+}
+.cw{background:#000;border-radius:6px;padding:clamp(3px,.6vw,6px);box-shadow:inset 0 0 28px rgba(0,0,0,.8)}
+canvas{display:block;width:100%;height:auto;background:#000;border-radius:3px}
+.ctrl{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;max-width:680px}
+.btn{
+  background:linear-gradient(180deg,#1a1a1a,#0d0d0d);border:1px solid #2a2a2a;border-bottom:3px solid #005515;
+  color:#00ff41;border-radius:6px;cursor:pointer;font:clamp(9px,1.8vw,12px) monospace;letter-spacing:1px;
+  padding:clamp(9px,1.8vw,13px) clamp(12px,2.4vw,18px);box-shadow:0 3px 8px rgba(0,0,0,.5)
+}
+.btn:active{transform:translateY(2px);border-bottom-width:1px}
+.btn.on{color:#fff;border-bottom-color:#fff;box-shadow:0 0 12px rgba(255,255,255,.2)}
+.slider{display:flex;align-items:center;gap:8px;color:#2a8a2a;font:clamp(9px,1.6vw,11px) monospace}
+.slider input[type=range]{
+  width:clamp(80px,20vw,150px);height:5px;-webkit-appearance:none;appearance:none;
+  background:linear-gradient(90deg,#0f3a0f,#1a1a1a);border-radius:3px;outline:none
+}
+.slider input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:20px;height:20px;border-radius:50%;
+  background:linear-gradient(135deg,#4a4a4a,#252525);border:2px solid #00ff41;cursor:pointer;box-shadow:0 0 8px rgba(0,255,65,.35)
+}
+.foot{font:9px monospace;color:#2a4a2a;letter-spacing:2px;opacity:.6}
+.foot a{color:#0f0;text-decoration:none;opacity:.7}
+</style>
+</head>
+<body>
+  <h1>ドット 棒 人 間</h1>
+  <div class="stage">
+    <div class="cw"><canvas id="cv" width="600" height="600"></canvas></div>
+  </div>
+  <div class="ctrl">
+    <button class="btn on" id="playBtn">⏸ PAUSE</button>
+    <button class="btn" id="rainbowBtn">🌈 RAINBOW</button>
+    <div class="slider">SPEED <input type="range" id="speed" min="1" max="10" value="4"></div>
+    <div class="slider">DOT <input type="range" id="dot" min="12" max="40" value="22"></div>
+    <input type="color" id="color" value="#00ff41" style="width:44px;height:34px;border:2px solid #0f0;border-radius:5px;background:#000;cursor:pointer">
+  </div>
+  <div class="foot">DOT-MATRIX STICKMAN · canvas raster</div>
+
+<script>
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+
+// ── 状態 ──
+let playing = true;
+let speedVal = 4;
+let dotPitch = 22;     // 1ドットあたりpx（グリッド密度を決める）
+let baseColor = "#00ff41";
+let rainbow = false;
+let rhue = 120;
+let phase = 0;         // 歩行位相
+let walkX = 0;         // 横移動（ドット単位）
+
+// ── 棒人間の骨格（グリッド単位） ──
+// 図形は高さ ~26 ドットぶん。中心を cx として組み立てる。
+function skeleton(cx, ph) {
+  const headR = 2.4;
+  const headCY = 4.2;
+  const shoulderY = headCY + headR + 1.6;
+  const hipY = shoulderY + 8.5;
+  const legLen = 8;
+  const armLen = 6.5;
+
+  const swing = Math.sin(ph) * 3.0;        // 脚の振り
+  const armSwing = Math.sin(ph + Math.PI) * 2.6; // 腕は逆位相
+  const bob = Math.abs(Math.cos(ph)) * 1.2;      // 上下バウンド
+  const cy0 = -bob;
+
+  const head = { x: cx, y: headCY + cy0, r: headR };
+  const shoulder = { x: cx, y: shoulderY + cy0 };
+  const hip = { x: cx, y: hipY + cy0 };
+  const segs = [
+    // 胴
+    [shoulder.x, shoulder.y, hip.x, hip.y],
+    // 腕（左右）
+    [shoulder.x, shoulder.y + 0.4, cx - 0.6 + armSwing, shoulder.y + armLen + cy0 * 0],
+    [shoulder.x, shoulder.y + 0.4, cx + 0.6 - armSwing, shoulder.y + armLen],
+    // 脚（左右）
+    [hip.x, hip.y, cx - swing, hipY + legLen + cy0],
+    [hip.x, hip.y, cx + swing, hipY + legLen + cy0],
+  ];
+  return { head, segs, bottom: hipY + legLen };
+}
+
+function distToSeg(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const qx = ax + t * dx, qy = ay + t * dy;
+  return Math.hypot(px - qx, py - qy);
+}
+
+// セル(col,row)が骨格上で点灯するか
+function isLit(col, row, sk) {
+  // 頭（リング）
+  const dHead = Math.abs(Math.hypot(col - sk.head.x, row - sk.head.y) - sk.head.r);
+  if (dHead < 0.62) return true;
+  for (const s of sk.segs) {
+    if (distToSeg(col, row, s[0], s[1], s[2], s[3]) < 0.58) return true;
+  }
+  return false;
+}
+
+function litColor() {
+  if (rainbow) { rhue = (rhue + 1.5) % 360; return `hsl(${rhue},100%,60%)`; }
+  return baseColor;
+}
+
+function frame() {
+  const W = cv.width, H = cv.height;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, W, H);
+
+  const pitch = dotPitch;
+  const COLS = Math.floor(W / pitch);
+  const ROWS = Math.floor(H / pitch);
+  const r = pitch * 0.40;
+  const offX = (W - COLS * pitch) / 2 + pitch / 2;
+  const offY = (H - ROWS * pitch) / 2 + pitch / 2;
+  const px = (c) => offX + c * pitch;
+  const py = (rr) => offY + rr * pitch;
+
+  const col = litColor();
+
+  // 図形の縦位置：床に立たせる
+  const sk0 = skeleton(0, phase);
+  const groundRow = ROWS - 3;
+  const yShift = groundRow - sk0.bottom;
+  // 横位置（ドット単位、wrap）
+  const cx = ((walkX % (COLS + 8)) + (COLS + 8)) % (COLS + 8) - 4;
+
+  const sk = skeleton(cx, phase);
+  sk.head.y += yShift;
+  for (const s of sk.segs) { s[1] += yShift; s[3] += yShift; }
+
+  // 全ドット描画（消灯は薄く、点灯は発光）
+  for (let rr = 0; rr < ROWS; rr++) {
+    for (let c = 0; c < COLS; c++) {
+      const lit = isLit(c, rr, sk);
+      const x = px(c), y = py(rr);
+      ctx.beginPath();
+      if (lit) {
+        ctx.fillStyle = col;
+        ctx.shadowColor = col; ctx.shadowBlur = pitch * 0.5;
+        ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
+        // ハイライト
+        ctx.beginPath(); ctx.fillStyle = "rgba(255,255,255,.35)";
+        ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.32, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.fillStyle = "rgba(255,255,255,.045)";
+        ctx.arc(x, y, r * 0.82, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  // 床ライン
+  ctx.strokeStyle = "rgba(0,255,65,.18)"; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, py(groundRow) + r + 3); ctx.lineTo(W, py(groundRow) + r + 3); ctx.stroke();
+
+  if (playing) {
+    phase += 0.10 + speedVal * 0.02;
+    walkX += speedVal * 0.10;
+  }
+  requestAnimationFrame(frame);
+}
+
+// ── コントロール ──
+document.getElementById("playBtn").addEventListener("click", (e) => {
+  playing = !playing;
+  e.target.textContent = playing ? "⏸ PAUSE" : "▶ PLAY";
+  e.target.classList.toggle("on", playing);
+});
+document.getElementById("rainbowBtn").addEventListener("click", (e) => {
+  rainbow = !rainbow;
+  e.target.classList.toggle("on", rainbow);
+});
+document.getElementById("speed").addEventListener("input", (e) => speedVal = +e.target.value);
+document.getElementById("dot").addEventListener("input", (e) => dotPitch = +e.target.value);
+document.getElementById("color").addEventListener("input", (e) => baseColor = e.target.value);
+
+frame();
+</script>
+</body>
+</html>
