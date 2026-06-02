@@ -64,7 +64,7 @@ canvas{display:block;width:100%;height:auto;background:#000;border-radius:4px}
     <div class="slider">SPEED <input type="range" id="speed" min="1" max="10" value="4"></div>
     <div class="slider">SIZE <input type="range" id="size" min="1" max="6" value="3"></div>
   </div>
-  <div class="foot"><a href="/">← LED BOARD に戻る</a></div>
+  <div class="foot"><a href="/">← DOT版に戻る</a></div>
 
 <script>
 const cv = document.getElementById("cv");
@@ -77,7 +77,6 @@ let speedVal = 4;
 let sizeVal = 3;
 let t = 0;
 
-// 各棒人間の状態
 function makeWalker(i, total) {
   return {
     x: (W / (total + 1)) * (i + 1) - 40,
@@ -94,16 +93,15 @@ function rebuild(n) {
   for (let i = 0; i < n; i++) walkers.push(makeWalker(i, n));
 }
 
-// 棒人間描画（歩行：腕・脚を逆位相で振り、胴体を上下にバウンド）
 function drawWalker(w, scale) {
   const headR = scale * 6, bodyH = scale * 22, armL = scale * 13, legL = scale * 18;
-  const swing = Math.sin(w.phase) * scale * 7;        // 脚の振り
-  const armSwing = Math.sin(w.phase + Math.PI) * scale * 6; // 腕は脚と逆位相
-  const bob = Math.abs(Math.cos(w.phase)) * scale * 2.5;    // 上下バウンド
+  const swing = Math.sin(w.phase) * scale * 7;
+  const armSwing = Math.sin(w.phase + Math.PI) * scale * 6;
+  const bob = Math.abs(Math.cos(w.phase)) * scale * 2.5;
 
   const x = w.x;
-  const hipY = GROUND - legL - bob;       // 腰
-  const shoulderY = hipY - bodyH;          // 肩
+  const hipY = GROUND - legL - bob;
+  const shoulderY = hipY - bodyH;
   const headCY = shoulderY - headR - scale * 2;
 
   const col = `hsl(${w.hue},100%,60%)`;
@@ -115,18 +113,14 @@ function drawWalker(w, scale) {
   ctx.shadowColor = col;
   ctx.shadowBlur = scale * 3;
 
-  // 頭
   ctx.beginPath(); ctx.arc(x, headCY, headR, 0, Math.PI * 2); ctx.stroke();
-  // 胴
   ctx.beginPath(); ctx.moveTo(x, shoulderY); ctx.lineTo(x, hipY); ctx.stroke();
-  // 腕（肩から左右に振る）
   ctx.beginPath();
   ctx.moveTo(x, shoulderY + scale * 2);
   ctx.lineTo(x - armL * 0.4 + armSwing, shoulderY + armL);
   ctx.moveTo(x, shoulderY + scale * 2);
   ctx.lineTo(x + armL * 0.4 - armSwing, shoulderY + armL);
   ctx.stroke();
-  // 脚（腰から左右に振る）
   ctx.beginPath();
   ctx.moveTo(x, hipY);
   ctx.lineTo(x - swing, hipY + legL);
@@ -141,7 +135,6 @@ function drawGround() {
   ctx.strokeStyle = "rgba(0,255,65,.25)";
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(0, GROUND + sizeVal * 18); ctx.lineTo(W, GROUND + sizeVal * 18); ctx.stroke();
-  // 地面のダッシュ
   ctx.strokeStyle = "rgba(0,255,65,.12)";
   ctx.lineWidth = 1;
   for (let gx = (t * 0.5) % 40 - 40; gx < W; gx += 40) {
@@ -170,7 +163,6 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
-// コントロール
 document.getElementById("playBtn").addEventListener("click", (e) => {
   playing = !playing;
   e.target.textContent = playing ? "⏸ PAUSE" : "▶ PLAY";
