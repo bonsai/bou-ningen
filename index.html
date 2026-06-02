@@ -46,7 +46,6 @@ canvas{display:block;width:100%;height:auto;background:#000;border-radius:3px}
 }
 .foot{font:9px monospace;color:#2a4a2a;letter-spacing:2px;opacity:.6}
 .foot a{color:#0f0;text-decoration:none;opacity:.7}
-/* カウントダウンオーバーレイ */
 #overlay{
   position:absolute;inset:0;display:none;align-items:center;justify-content:center;
   background:rgba(0,0,0,.6);border-radius:6px;pointer-events:none;z-index:10;flex-direction:column;gap:8px
@@ -54,7 +53,6 @@ canvas{display:block;width:100%;height:auto;background:#000;border-radius:3px}
 #overlay.active{display:flex}
 #countNum{font:bold clamp(32px,12vw,72px) monospace;color:#ff4444;text-shadow:0 0 20px rgba(255,68,68,.8)}
 #countLabel{font:clamp(9px,2vw,12px) monospace;color:#ff8888;letter-spacing:3px}
-/* カメラプレビュー（デバッグ用・非表示） */
 #camVideo{display:none}
 </style>
 </head>
@@ -75,20 +73,17 @@ canvas{display:block;width:100%;height:auto;background:#000;border-radius:3px}
     <div class="slider">SPEED <input type="range" id="speed" min="1" max="10" value="4"></div>
     <div class="slider">DOT <input type="range" id="dot" min="12" max="40" value="22"></div>
     <input type="color" id="color" value="#00ff41" style="width:44px;height:34px;border:2px solid #0f0;border-radius:5px;background:#000;cursor:pointer">
-    <!-- 動作ボタン -->
     <button class="btn motion-btn on" id="motionWalk">🚶 WALK</button>
     <button class="btn motion-btn" id="motionIdle">🧍 IDLE</button>
     <button class="btn motion-btn" id="motionWave">👋 WAVE</button>
     <button class="btn motion-btn" id="motionJump">🦘 JUMP</button>
     <button class="btn motion-btn" id="motionDance">💃 DANCE</button>
-    <!-- MediaPipe録画ボタン -->
     <button class="btn" id="recBtn">📹 REC 5s</button>
   </div>
-  <div class="foot">DOT-MATRIX STICKMAN · MediaPipe対応</div>
+  <div class="foot">DOT-MATRIX STICKMAN · MediaPipe対応 · <a href="line.html">LINE版 →</a></div>
 
 <video id="camVideo" playsinline></video>
 
-<!-- MediaPipe Pose -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 
@@ -96,7 +91,6 @@ canvas{display:block;width:100%;height:auto;background:#000;border-radius:3px}
 const cv = document.getElementById("cv");
 const ctx = cv.getContext("2d");
 
-// ── 状態 ──
 let playing = true;
 let speedVal = 4;
 let dotPitch = 22;
@@ -107,8 +101,7 @@ let phase = 0;
 let walkX = 0;
 let motionType = "walk";
 
-// ── MediaPipe 録画 ──
-let recordedFrames = [];   // [{landmarks: [...]}]
+let recordedFrames = [];
 let isRecording = false;
 let recordCountdown = 5;
 let countdownTimer = null;
@@ -117,7 +110,6 @@ let mpPose = null;
 let mpCamera = null;
 let latestLandmarks = null;
 
-// ── 通常の骨格（procedural）──
 function skeleton(cx, ph, type) {
   type = type || motionType;
   const headR = 2.4;
@@ -130,9 +122,7 @@ function skeleton(cx, ph, type) {
   let swing = Math.sin(ph) * 3.0;
   let armSwing = Math.sin(ph + Math.PI) * 2.6;
   let bob = Math.abs(Math.cos(ph)) * 1.2;
-  // 腰の横揺れ（歩行時のリアリティ向上）
   let hipSway = Math.sin(ph) * 0.7;
-  // 胴のひねり
   let torsoTilt = Math.sin(ph) * 0.4;
 
   if (type === "idle") {
@@ -168,57 +158,43 @@ function skeleton(cx, ph, type) {
   const armBase = 2.2;
   const legBase = 1.4;
 
-  // 腕：肘を経由してより自然に
   const lElbowX = shoulder.x - armBase + armSwing * 0.6;
   const lElbowY = shoulder.y + armLen * 0.48 + cy0;
   const rElbowX = shoulder.x + armBase - armSwing * 0.4;
   const rElbowY = shoulder.y + armLen * 0.48 + cy0;
 
-  // 脚：膝を経由してより自然に
   const lKneeX = hip.x - legBase * 0.6 - swing * 0.4;
   const lKneeY = hip.y + legLen * 0.5;
   const rKneeX = hip.x + legBase * 0.6 + swing * 0.25;
   const rKneeY = hip.y + legLen * 0.5;
 
   const segs = [
-    // 首〜胴
     [head.x, head.y + headR, shoulder.x, shoulder.y],
     [shoulder.x, shoulder.y, hip.x, hip.y],
-    // 左腕（上腕＋前腕）
     [shoulder.x, shoulder.y + 0.4, lElbowX, lElbowY],
     [lElbowX, lElbowY, shoulder.x - armBase + armSwing, shoulder.y + armLen + cy0],
-    // 右腕
     [shoulder.x, shoulder.y + 0.4, rElbowX, rElbowY],
     [rElbowX, rElbowY, shoulder.x + armBase - armSwing * 0.6, shoulder.y + armLen + cy0],
-    // 左脚（太もも＋すね）
     [hip.x, hip.y, lKneeX, lKneeY],
     [lKneeX, lKneeY, hip.x - legBase - swing, hipY + legLen + cy0],
-    // 右脚
     [hip.x, hip.y, rKneeX, rKneeY],
     [rKneeX, rKneeY, hip.x + legBase + swing * 0.7, hipY + legLen + cy0],
   ];
   return { head, segs, bottom: hipY + legLen };
 }
 
-// ── MediaPipe ランドマーク → 骨格 ──
 function skeletonFromLandmarks(lm, cx) {
-  // MediaPipe Pose landmark indices
-  // 0:nose 11:l_shoulder 12:r_shoulder 13:l_elbow 14:r_elbow
-  // 15:l_wrist 16:r_wrist 23:l_hip 24:r_hip 25:l_knee 26:r_knee 27:l_ankle 28:r_ankle
-
   const hipMidX = (lm[23].x + lm[24].x) / 2;
   const hipMidY = (lm[23].y + lm[24].y) / 2;
   const shoulderMidX = (lm[11].x + lm[12].x) / 2;
   const shoulderMidY = (lm[11].y + lm[12].y) / 2;
 
-  // スケール：鼻〜足首の高さを基準に正規化
   const topY = lm[0].y;
   const botY = Math.max(lm[27].y, lm[28].y);
   const normH = botY - topY;
-  const ourH = 20.0; // グリッド単位の全身高さ
+  const ourH = 20.0;
   const scale = normH > 0.04 ? ourH / normH : 200;
 
-  // 座標変換（カメラは左右反転しているので x は反転）
   function gx(idx) { return cx - (lm[idx].x - hipMidX) * scale; }
   function gy(idx) { return (lm[idx].y - topY) * scale; }
   function gxV(v) { return cx - (v - hipMidX) * scale; }
@@ -232,23 +208,17 @@ function skeletonFromLandmarks(lm, cx) {
   const head = { x: gx(0), y: noseGy, r: headR };
 
   const segs = [
-    // 首
     [head.x, noseGy + headR, smx, smy],
-    // 胴
     [smx, smy, hmx, hmy],
-    // 右腕（カメラ左=画面右）: lm12=r_shoulder→lm14=r_elbow→lm16=r_wrist
     [smx, smy, gx(12), gy(12)],
     [gx(12), gy(12), gx(14), gy(14)],
     [gx(14), gy(14), gx(16), gy(16)],
-    // 左腕: lm11=l_shoulder→lm13=l_elbow→lm15=l_wrist
     [smx, smy, gx(11), gy(11)],
     [gx(11), gy(11), gx(13), gy(13)],
     [gx(13), gy(13), gx(15), gy(15)],
-    // 右脚: lm24=r_hip→lm26=r_knee→lm28=r_ankle
     [hmx, hmy, gx(24), gy(24)],
     [gx(24), gy(24), gx(26), gy(26)],
     [gx(26), gy(26), gx(28), gy(28)],
-    // 左脚: lm23=l_hip→lm25=l_knee→lm27=l_ankle
     [hmx, hmy, gx(23), gy(23)],
     [gx(23), gy(23), gx(25), gy(25)],
     [gx(25), gy(25), gx(27), gy(27)],
@@ -332,7 +302,6 @@ function frame() {
     }
   }
 
-  // 地面ライン
   ctx.strokeStyle = "rgba(0,255,65,.18)"; ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(0, py(groundRow) + r + 3); ctx.lineTo(W, py(groundRow) + r + 3); ctx.stroke();
@@ -342,7 +311,6 @@ function frame() {
     phase += speedFactor;
 
     if (motionType === "playback") {
-      // 録画フレームレート(約30fps)を元に再生速度を調整
       playbackIdx = (playbackIdx + 1) % Math.max(1, recordedFrames.length);
       walkX += speedVal * 0.05;
     } else if (motionType === "walk") {
@@ -354,7 +322,6 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
-// ── コントロール ──
 function setMotion(type) {
   motionType = type;
   document.querySelectorAll('.motion-btn').forEach(b => {
@@ -364,7 +331,6 @@ function setMotion(type) {
   recBtn.classList.toggle('on', type === 'playback');
 }
 
-// ── MediaPipe 初期化 ──
 function initMediaPipe(onReady) {
   if (mpPose) { onReady(); return; }
 
@@ -406,7 +372,6 @@ function initMediaPipe(onReady) {
   });
 }
 
-// ── 5秒録画 ──
 function startRecording() {
   const recBtn = document.getElementById("recBtn");
   const overlay = document.getElementById("overlay");
@@ -425,7 +390,6 @@ function startRecording() {
     countNum.textContent = recordCountdown;
     countLabel.textContent = "GET READY";
 
-    // カウントダウン
     countdownTimer = setInterval(() => {
       recordCountdown--;
       if (recordCountdown <= 0) {
@@ -434,7 +398,6 @@ function startRecording() {
         countLabel.textContent = "REC";
         isRecording = true;
 
-        // 5秒後に停止
         setTimeout(() => {
           isRecording = false;
           overlay.classList.remove("active");
